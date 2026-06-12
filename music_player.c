@@ -17,6 +17,7 @@
 #define LINE 0x00b9d4ff
 #define PINK 0x00ff5f8d
 #define MUTED 0x00b7c2df
+#define SOFT 0x00eef6ff
 
 #define PREV_CX 224
 #define PLAY_CX 314
@@ -32,6 +33,9 @@ static time_t g_start;
 
 static int clamp(int v, int a, int b){return v<a?a:(v>b?b:v);}
 static int hit(int x,int y,int rx,int ry,int rw,int rh){return x>=rx&&x<rx+rw&&y>=ry&&y<ry+rh;}
+
+static const char* song_name(void)
+{const char *s=strrchr(g_song_paths[g_cur],'/');return s?s+1:g_song_paths[g_cur];}
 
 static int touch_poll_music(int fd,int ms)
 {struct input_event ev;
@@ -53,8 +57,8 @@ static int blend(int bg,int fg,int a)
  int r=(br*(255-a)+fr*a)/255,g=(bg2*(255-a)+fg2*a)/255,b=(bb*(255-a)+fb*a)/255;return(r<<16)|(g<<8)|b;}
 
 static void glass(int*l,int x,int y,int w,int h)
-{for(int yy=y;yy<y+h;yy++)for(int xx=x;xx<x+w;xx++){int*p=l+yy*800+xx;*p=blend(*p,0x00d8e6ff,55);*p=blend(*p,0x002a4f88,45);}
- lcd_frame(l,x,y,w,h,2,LINE);}
+{for(int yy=y;yy<y+h;yy++)for(int xx=x;xx<x+w;xx++){int*p=l+yy*800+xx;*p=blend(*p,0x00ffffff,32);*p=blend(*p,0x002a4f88,24);}
+ lcd_frame(l,x,y,w,h,1,LINE);}
 
 static int is_mp3(const char*n)
 {const char*d=strrchr(n,'.');return d&&tolower(d[1])=='m'&&tolower(d[2])=='p'&&tolower(d[3])=='3'&&d[4]==0;}
@@ -108,6 +112,7 @@ static void draw_cover(int*lcd)
 {char p[64];static unsigned char b[800*480*3];static int sw,sh,last=-1,ok=0;int cx=157,cy=205,r=93;
  snprintf(p,sizeof(p),"%s/c%d.bmp",COVER_DIR,g_cur+1);
  if(last!=g_cur){ok=(read_bmp(p,b,&sw,&sh)!=-1);last=g_cur;}
+ circle(lcd,cx,cy,r+3,0x00eef6ff);
  if(ok){
   for(int yy=-r;yy<=r;yy++)for(int xx=-r;xx<=r;xx++)if(xx*xx+yy*yy<=r*r){
    int rx,ry;spin_xy(xx,yy,(m_playing&&!g_paused)?g_spin:0,&rx,&ry);
@@ -125,13 +130,13 @@ static void draw_info_text(void)
 {char s[64];
  sprintf(s,"\xB8\xE8\xC7\xFA %d",g_cur+1);Display_characterX(284,116,s,CLR_WHITE,2);
  Display_characterX(284,170,m_playing?(g_paused?"\xD4\xDD\xCD\xA3":"\xB2\xA5\xB7\xC5\xD6\xD0"):"\xD7\xBC\xB1\xB8",m_playing&&!g_paused?PINK:MUTED,1);
- Display_characterX(284,206,g_song_paths[g_cur],CLR_WHITE,1);
+ Display_characterX(284,206,song_name(),CLR_WHITE,1);
  Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
  Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);}
 
 static void draw_list_gfx(int*lcd)
 {glass(lcd,516,96,248,240);
- for(int i=0;i<g_song_total;i++){int y=154+i*34;if(i==g_cur)lcd_fill(lcd,530,y-7,218,26,0x00dce8ff);
+ for(int i=0;i<g_song_total;i++){int y=154+i*34;if(i==g_cur){for(int yy=y-8;yy<y+20;yy++)for(int xx=530;xx<748;xx++){int*p=lcd+yy*800+xx;*p=blend(*p,0x00ffffff,70);}lcd_fill(lcd,534,y-7,4,26,PINK);}
  }}
 
 static void draw_list_text(void)
@@ -142,7 +147,7 @@ static void draw_list_text(void)
 static void draw_progress_gfx(int*lcd)
 {if(m_playing&&!g_paused)g_elapsed=time(NULL)-g_start;g_elapsed=clamp(g_elapsed,0,g_duration);
  glass(lcd,52,304,448,36);char a[16],b[16];sprintf(a,"%02d:%02d",g_elapsed/60,g_elapsed%60);sprintf(b,"%02d:%02d",g_duration/60,g_duration%60);
- int x=118,w=300,fill=g_elapsed*w/(g_duration?g_duration:240);lcd_fill(lcd,x,319,w,8,0x00e8eef8);lcd_fill(lcd,x,319,fill,8,PINK);}
+ int x=118,w=300,fill=g_elapsed*w/(g_duration?g_duration:240);lcd_fill(lcd,x,321,w,5,SOFT);lcd_fill(lcd,x,321,fill,5,PINK);circle(lcd,x+fill,323,6,SOFT);}
 
 static void draw_progress_text(void)
 {char a[16],b[16];sprintf(a,"%02d:%02d",g_elapsed/60,g_elapsed%60);sprintf(b,"%02d:%02d",g_duration/60,g_duration%60);
@@ -150,11 +155,11 @@ static void draw_progress_text(void)
 
 static void draw_ctrl_gfx(int*lcd)
 {glass(lcd,38,348,452,82);lcd_frame(lcd,54,356,128,28,2,g_repeat?PINK:LINE);lcd_frame(lcd,54,388,128,28,2,g_random?PINK:LINE);
- circle(lcd,PREV_CX,CTRL_CY,30,PANEL2);circle(lcd,PLAY_CX,CTRL_CY,42,PINK);circle(lcd,NEXT_CX,CTRL_CY,30,PANEL2);
+ circle(lcd,PREV_CX,CTRL_CY,30,0x006782bd);circle(lcd,PLAY_CX,CTRL_CY,42,PINK);circle(lcd,NEXT_CX,CTRL_CY,30,0x006782bd);
  lcd_fill(lcd,PREV_CX-19,CTRL_CY-14,5,28,CLR_WHITE);draw_tri_l(lcd,PREV_CX-7,CTRL_CY-14,17,28,CLR_WHITE);
  if(m_playing&&!g_paused){lcd_fill(lcd,PLAY_CX-14,CTRL_CY-24,10,48,CLR_WHITE);lcd_fill(lcd,PLAY_CX+10,CTRL_CY-24,10,48,CLR_WHITE);}else draw_tri_r(lcd,PLAY_CX-14,CTRL_CY-28,40,54,CLR_WHITE);
  draw_tri_r(lcd,NEXT_CX-10,CTRL_CY-14,17,28,CLR_WHITE);lcd_fill(lcd,NEXT_CX+14,CTRL_CY-14,5,28,CLR_WHITE);
- lcd_fill(lcd,548,374,174,8,0x00e8eef8);lcd_fill(lcd,548,374,g_volume*174/100,8,PINK);}
+ lcd_fill(lcd,548,376,174,5,SOFT);lcd_fill(lcd,548,376,g_volume*174/100,5,PINK);circle(lcd,548+g_volume*174/100,378,6,SOFT);}
 
 static void draw_ctrl_text(void)
 {Display_characterX(78,363,"REPEAT",CLR_WHITE,1);Display_characterX(78,395,"RANDOM",CLR_WHITE,1);
