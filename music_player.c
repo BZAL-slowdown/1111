@@ -13,6 +13,7 @@
 #define SONG_COUNT 5
 #define IDLE_TIME 5
 #define LRC_MAX 80
+#define LRC_ADJUST_SEC 0
 
 #define PANEL 0x003b5f92
 #define PANEL2 0x004d6fa8
@@ -41,6 +42,9 @@ static int hit(int x,int y,int rx,int ry,int rw,int rh){return x>=rx&&x<rx+rw&&y
 static const char* song_name(void)
 {const char *s=strrchr(g_song_paths[g_cur],'/');return s?s+1:g_song_paths[g_cur];}
 
+static void song_base(char *out,int n)
+{const char *s=song_name();int i=0;while(s[i]&&s[i]!='.'&&i<n-1){out[i]=s[i];i++;}out[i]=0;}
+
 static void trim_line(char *s)
 {int n=strlen(s);while(n>0&&(s[n-1]=='\n'||s[n-1]=='\r'||s[n-1]==' ')){s[--n]=0;}}
 
@@ -51,13 +55,14 @@ static int parse_lrc_time(const char *s,int *sec)
 {int m=0,ss=0;if(sscanf(s,"[%d:%d",&m,&ss)==2){*sec=m*60+ss;return 1;}return 0;}
 
 static void load_lrc(void)
-{char path[64],line[160];FILE *fp;g_lrc_count=0;g_lrc_idx=-1;
- snprintf(path,sizeof(path),"%s/%d.lrc",LRC_DIR,g_cur+1);fp=fopen(path,"r");
- if(!fp){printf("lrc not found: %s\n",path);return;}
+{char path[64],line[160],base[48];FILE *fp;g_lrc_count=0;g_lrc_idx=-1;
+ song_base(base,sizeof(base));snprintf(path,sizeof(path),"%s/%s.lrc",LRC_DIR,base);fp=fopen(path,"r");
+ if(!fp){snprintf(path,sizeof(path),"%s/%d.lrc",LRC_DIR,g_cur+1);fp=fopen(path,"r");}
+ if(!fp){printf("lrc not found for: %s\n",song_name());return;}
  while(fgets(line,sizeof(line),fp)&&g_lrc_count<LRC_MAX){
   int sec;char *p=strchr(line,']');trim_line(line);
   if(!p||!parse_lrc_time(line,&sec)||!p[1])continue;
-  g_lrc_time[g_lrc_count]=sec;
+  g_lrc_time[g_lrc_count]=clamp(sec+LRC_ADJUST_SEC,0,3600);
   strncpy(g_lrc_text[g_lrc_count],p+1,sizeof(g_lrc_text[0])-1);
   g_lrc_text[g_lrc_count][sizeof(g_lrc_text[0])-1]=0;
   fit_text(g_lrc_text[g_lrc_count],22);
