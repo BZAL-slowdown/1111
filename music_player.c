@@ -56,6 +56,12 @@ static void trim_line(char *s)
 static void fit_text(char *s,int max)
 {int i=0;while(s[i]&&i<max){if((unsigned char)s[i]&0x80){if(i+1>=max||!s[i+1])break;i+=2;}else i++;}s[i]=0;}
 
+static int gbk_chars(const char *s)
+{int i=0,n=0;while(s[i]){i+=((unsigned char)s[i]&0x80)?2:1;n++;}return n;}
+
+static const char* gbk_advance(const char *s,int chars)
+{int i=0;while(s[i]&&chars-- >0)i+=((unsigned char)s[i]&0x80)?2:1;return s+i;}
+
 static int parse_lrc_time(const char *s,int *ms)
 {int m=0,ss=0,frac=0,scale=100;const char *dot;
  if(sscanf(s,"[%d:%d",&m,&ss)!=2)return 0;
@@ -74,7 +80,6 @@ static void load_lrc(void)
   g_lrc_time[g_lrc_count]=clamp(ms+LRC_ADJUST_MS,0,3600000);
   strncpy(g_lrc_text[g_lrc_count],p+1,sizeof(g_lrc_text[0])-1);
   g_lrc_text[g_lrc_count][sizeof(g_lrc_text[0])-1]=0;
-  fit_text(g_lrc_text[g_lrc_count],22);
   g_lrc_count++;
  }
  fclose(fp);printf("lrc loaded: %s lines=%d\n",path,g_lrc_count);}
@@ -85,6 +90,12 @@ static int lrc_current_index(void)
 static void draw_lrc_line(int x,int y,const char *text,int color,int size,int max)
 {char tmp[96];strncpy(tmp,text,sizeof(tmp)-1);tmp[sizeof(tmp)-1]=0;fit_text(tmp,max);
  Display_characterX(x,y,(unsigned char*)tmp,color,size);}
+
+static void draw_lrc_scroll(int x,int y,const char *text,int color,int max_chars,int phase)
+{int total=gbk_chars(text),start=0;const char *p;char tmp[96];
+ if(total>max_chars){int span=total-max_chars+1;start=(phase/2)%span;}
+ p=gbk_advance(text,start);strncpy(tmp,p,sizeof(tmp)-1);tmp[sizeof(tmp)-1]=0;fit_text(tmp,max_chars*2);
+ Display_characterX(x,y,(unsigned char*)tmp,color,1);}
 
 static int touch_poll_music(int fd,int ms)
 {struct input_event ev;
@@ -183,10 +194,10 @@ static void draw_info_text(void)
  Display_characterX(284,206,(unsigned char*)song_name(),CLR_WHITE,1);
  if(g_lrc_count>0){
   int idx=lrc_current_index();
-  if(idx>=1)draw_lrc_line(284,228,g_lrc_text[idx-1],CLR_WHITE,1,22);
-  if(idx>=0)draw_lrc_line(284,252,g_lrc_text[idx],LRC_RED,1,22);
+  if(idx>=1)draw_lrc_scroll(284,228,g_lrc_text[idx-1],CLR_WHITE,11,g_elapsed_ms/600);
+  if(idx>=0)draw_lrc_scroll(284,252,g_lrc_text[idx],LRC_RED,11,g_elapsed_ms/400);
   else draw_lrc_line(284,252,"\xB5\xC8\xB4\xFD\xB8\xE8\xB4\xCA",LRC_RED,1,22);
-  if(idx+1<g_lrc_count)draw_lrc_line(284,276,g_lrc_text[idx+1],CLR_WHITE,1,22);
+  if(idx+1<g_lrc_count)draw_lrc_scroll(284,276,g_lrc_text[idx+1],CLR_WHITE,11,g_elapsed_ms/600);
  }else{
   Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
   Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);
@@ -258,7 +269,7 @@ int music_run(int *lcd)
  while(1){if(m_playing&&!g_paused&&!madplay_on()){if(g_repeat)start_song(g_cur);else next_song();refresh_body(lcd);}
   if(touch_poll_music(touch_fd,50)==-1){tick++;
    if(m_playing&&!g_paused&&tick%4==0){g_spin++;copy_bg(52,100,214,216);draw_cover(g_frame);blit(lcd,52,100,214,216);}
-   if(tick%4==0){int li;if(m_playing&&!g_paused){g_elapsed_ms=now_ms()-g_start_ms;g_elapsed=g_elapsed_ms/1000;}li=lrc_current_index();if(li!=g_lrc_idx){g_lrc_idx=li;refresh_info(lcd);}}
+   if(tick%8==0){int li;if(m_playing&&!g_paused){g_elapsed_ms=now_ms()-g_start_ms;g_elapsed=g_elapsed_ms/1000;}li=lrc_current_index();if(li!=g_lrc_idx||li>=0){g_lrc_idx=li;refresh_info(lcd);}}
    if(tick%20==0){refresh_progress(lcd);draw_top();}
    if((!m_playing||g_paused)&&time(NULL)-g_last_touch>=IDLE_TIME){close(touch_fd);stop_music();return 0;}continue;}
   tick=0;
