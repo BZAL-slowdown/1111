@@ -183,10 +183,10 @@ static void draw_info_text(void)
  Display_characterX(284,206,(unsigned char*)song_name(),CLR_WHITE,1);
  if(g_lrc_count>0){
   int idx=lrc_current_index();
-  if(idx>0)draw_lrc_line(284,228,g_lrc_text[idx-1],CLR_WHITE,1,22);
-  if(idx>=0)draw_lrc_line(284,248,g_lrc_text[idx],LRC_RED,2,12);
-  else draw_lrc_line(284,248,"\xB5\xC8\xB4\xFD\xB8\xE8\xB4\xCA",LRC_RED,2,12);
-  if(idx+1<g_lrc_count)draw_lrc_line(284,286,g_lrc_text[idx+1],CLR_WHITE,1,22);
+  if(idx>=1)draw_lrc_line(284,228,g_lrc_text[idx-1],CLR_WHITE,1,22);
+  if(idx>=0)draw_lrc_line(284,252,g_lrc_text[idx],LRC_RED,1,22);
+  else draw_lrc_line(284,252,"\xB5\xC8\xB4\xFD\xB8\xE8\xB4\xCA",LRC_RED,1,22);
+  if(idx+1<g_lrc_count)draw_lrc_line(284,276,g_lrc_text[idx+1],CLR_WHITE,1,22);
  }else{
   Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
   Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);
