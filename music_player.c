@@ -22,6 +22,7 @@
 #define PINK 0x00ff5f8d
 #define MUTED 0x00b7c2df
 #define SOFT 0x00eef6ff
+#define LRC_RED 0x00ff3b45
 
 #define PREV_CX 224
 #define PLAY_CX 314
@@ -80,6 +81,10 @@ static void load_lrc(void)
 
 static int lrc_current_index(void)
 {int idx=-1;for(int i=0;i<g_lrc_count;i++){if(g_elapsed_ms>=g_lrc_time[i])idx=i;else break;}return idx;}
+
+static void draw_lrc_line(int x,int y,const char *text,int color,int size,int max)
+{char tmp[96];strncpy(tmp,text,sizeof(tmp)-1);tmp[sizeof(tmp)-1]=0;fit_text(tmp,max);
+ Display_characterX(x,y,(unsigned char*)tmp,color,size);}
 
 static int touch_poll_music(int fd,int ms)
 {struct input_event ev;
@@ -178,9 +183,10 @@ static void draw_info_text(void)
  Display_characterX(284,206,(unsigned char*)song_name(),CLR_WHITE,1);
  if(g_lrc_count>0){
   int idx=lrc_current_index();
-  if(idx>=0)Display_characterX(284,238,(unsigned char*)g_lrc_text[idx],PINK,1);
-  else Display_characterX(284,238,"\xB5\xC8\xB4\xFD\xB8\xE8\xB4\xCA",MUTED,1);
-  if(idx+1<g_lrc_count)Display_characterX(284,266,(unsigned char*)g_lrc_text[idx+1],MUTED,1);
+  if(idx>0)draw_lrc_line(284,228,g_lrc_text[idx-1],CLR_WHITE,1,22);
+  if(idx>=0)draw_lrc_line(284,248,g_lrc_text[idx],LRC_RED,2,12);
+  else draw_lrc_line(284,248,"\xB5\xC8\xB4\xFD\xB8\xE8\xB4\xCA",LRC_RED,2,12);
+  if(idx+1<g_lrc_count)draw_lrc_line(284,286,g_lrc_text[idx+1],CLR_WHITE,1,22);
  }else{
   Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
   Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);
