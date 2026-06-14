@@ -9,8 +9,10 @@
 #define COVER_DIR "/nine/photo"
 #define BG1 "/nine/photo/music_bg.bmp"
 #define BG2 "/nine/photo/b1.bmp"
+#define LRC_DIR "/nine/lrc"
 #define SONG_COUNT 5
 #define IDLE_TIME 5
+#define LRC_MAX 80
 
 #define PANEL 0x003b5f92
 #define PANEL2 0x004d6fa8
@@ -26,8 +28,10 @@
 #define SWIPE_MIN 40
 
 static char g_song_paths[SONG_COUNT][128];
+static char g_lrc_text[LRC_MAX][96];
+static int g_lrc_time[LRC_MAX];
 static int g_song_total;
-static int g_cur, m_playing, g_paused, g_repeat, g_random, g_volume = 68, g_spin;
+static int g_cur, m_playing, g_paused, g_repeat, g_random, g_volume = 68, g_spin, g_lrc_count, g_lrc_idx = -1;
 static int g_duration = 240, g_elapsed, g_bg[800 * 480], g_frame[800 * 480];
 static time_t g_start;
 
@@ -36,6 +40,33 @@ static int hit(int x,int y,int rx,int ry,int rw,int rh){return x>=rx&&x<rx+rw&&y
 
 static const char* song_name(void)
 {const char *s=strrchr(g_song_paths[g_cur],'/');return s?s+1:g_song_paths[g_cur];}
+
+static void trim_line(char *s)
+{int n=strlen(s);while(n>0&&(s[n-1]=='\n'||s[n-1]=='\r'||s[n-1]==' ')){s[--n]=0;}}
+
+static void fit_text(char *s,int max)
+{int i=0;while(s[i]&&i<max){if((unsigned char)s[i]&0x80){if(i+1>=max||!s[i+1])break;i+=2;}else i++;}s[i]=0;}
+
+static int parse_lrc_time(const char *s,int *sec)
+{int m=0,ss=0;if(sscanf(s,"[%d:%d",&m,&ss)==2){*sec=m*60+ss;return 1;}return 0;}
+
+static void load_lrc(void)
+{char path[64],line[160];FILE *fp;g_lrc_count=0;g_lrc_idx=-1;
+ snprintf(path,sizeof(path),"%s/%d.lrc",LRC_DIR,g_cur+1);fp=fopen(path,"r");
+ if(!fp){printf("lrc not found: %s\n",path);return;}
+ while(fgets(line,sizeof(line),fp)&&g_lrc_count<LRC_MAX){
+  int sec;char *p=strchr(line,']');trim_line(line);
+  if(!p||!parse_lrc_time(line,&sec)||!p[1])continue;
+  g_lrc_time[g_lrc_count]=sec;
+  strncpy(g_lrc_text[g_lrc_count],p+1,sizeof(g_lrc_text[0])-1);
+  g_lrc_text[g_lrc_count][sizeof(g_lrc_text[0])-1]=0;
+  fit_text(g_lrc_text[g_lrc_count],22);
+  g_lrc_count++;
+ }
+ fclose(fp);printf("lrc loaded: %s lines=%d\n",path,g_lrc_count);}
+
+static int lrc_current_index(void)
+{int idx=-1;for(int i=0;i<g_lrc_count;i++){if(g_elapsed>=g_lrc_time[i])idx=i;else break;}return idx;}
 
 static int touch_poll_music(int fd,int ms)
 {struct input_event ev;
@@ -82,6 +113,7 @@ static void set_vol(int v)
 
 static void start_song(int idx)
 {char cmd[220];idx=clamp(idx,0,g_song_total-1);g_cur=idx;g_elapsed=0;g_duration=duration_of(g_song_paths[idx]);
+ load_lrc();
  if(access(g_song_paths[idx],R_OK)!=0){printf("music not found: %s\n",g_song_paths[idx]);m_playing=0;g_paused=0;return;}
  stop_music();usleep(100000);snprintf(cmd,sizeof(cmd),"madplay \"%s\" >/tmp/music_player_madplay.log 2>&1 &",g_song_paths[idx]);system(cmd);usleep(200000);
  m_playing=madplay_on();g_paused=0;g_start=time(NULL);if(!m_playing)printf("madplay start failed, see /tmp/music_player_madplay.log\n");}
@@ -130,9 +162,15 @@ static void draw_info_text(void)
 {char s[64];
  sprintf(s,"\xB8\xE8\xC7\xFA %d",g_cur+1);Display_characterX(284,116,s,CLR_WHITE,2);
  Display_characterX(284,170,m_playing?(g_paused?"\xD4\xDD\xCD\xA3":"\xB2\xA5\xB7\xC5\xD6\xD0"):"\xD7\xBC\xB1\xB8",m_playing&&!g_paused?PINK:MUTED,1);
- Display_characterX(284,206,song_name(),CLR_WHITE,1);
- Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
- Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);}
+ Display_characterX(284,206,(unsigned char*)song_name(),CLR_WHITE,1);
+ if(g_lrc_count>0){
+  int idx=lrc_current_index();if(idx<0)idx=0;
+  Display_characterX(284,238,(unsigned char*)g_lrc_text[idx],PINK,1);
+  if(idx+1<g_lrc_count)Display_characterX(284,266,(unsigned char*)g_lrc_text[idx+1],MUTED,1);
+ }else{
+  Display_characterX(284,238,g_random?"\xCB\xE6\xBB\xFA\xB2\xA5\xB7\xC5":"\xCB\xB3\xD0\xF2\xB2\xA5\xB7\xC5",MUTED,1);
+  Display_characterX(284,266,g_repeat?"\xB5\xA5\xC7\xFA\xD1\xAD\xBB\xB7":"\xD7\xD4\xB6\xAF\xCF\xC2\xD2\xBB\xCA\xD7",MUTED,1);
+ }}
 
 static void draw_list_gfx(int*lcd)
 {glass(lcd,516,96,248,240);
@@ -179,6 +217,9 @@ static void refresh_info_ctrl(int *lcd)
 {copy_bg(276,100,224,216);copy_bg(38,348,452,82);draw_info_gfx(g_frame);draw_ctrl_gfx(g_frame);
  blit(lcd,276,100,224,216);blit(lcd,38,348,452,82);draw_info_text();draw_ctrl_text();}
 
+static void refresh_info(int *lcd)
+{copy_bg(276,100,224,216);draw_info_gfx(g_frame);blit(lcd,276,100,224,216);draw_info_text();}
+
 static void refresh_ctrl(int *lcd)
 {copy_bg(38,348,712,82);draw_ctrl_gfx(g_frame);blit(lcd,38,348,712,82);draw_ctrl_text();}
 
@@ -190,14 +231,14 @@ static void refresh_cover_progress(int *lcd)
  blit(lcd,52,100,214,216);blit(lcd,52,304,448,36);draw_progress_text();}
 
 int music_run(int *lcd)
-{scan_songs();srand(time(NULL));g_cur=0;m_playing=0;g_paused=0;g_repeat=0;g_random=0;g_elapsed=0;g_spin=0;set_vol(g_volume);draw_all(lcd);g_last_touch=time(NULL);
+{scan_songs();srand(time(NULL));g_cur=0;m_playing=0;g_paused=0;g_repeat=0;g_random=0;g_elapsed=0;g_spin=0;load_lrc();set_vol(g_volume);draw_all(lcd);g_last_touch=time(NULL);
  int touch_fd=open("/dev/input/event0",O_RDWR);
  if(touch_fd==-1){perror("open touch");return 0;}
  int tick=0;
  while(1){if(m_playing&&!g_paused&&!madplay_on()){if(g_repeat)start_song(g_cur);else next_song();refresh_body(lcd);}
   if(touch_poll_music(touch_fd,50)==-1){tick++;
    if(m_playing&&!g_paused&&tick%4==0){g_spin++;copy_bg(52,100,214,216);draw_cover(g_frame);blit(lcd,52,100,214,216);}
-   if(tick%20==0){refresh_progress(lcd);draw_top();}
+   if(tick%20==0){int li=lrc_current_index();refresh_progress(lcd);draw_top();if(li!=g_lrc_idx){g_lrc_idx=li;refresh_info(lcd);}}
    if((!m_playing||g_paused)&&time(NULL)-g_last_touch>=IDLE_TIME){close(touch_fd);stop_music();return 0;}continue;}
   tick=0;
   g_last_touch=time(NULL);int x=x2,y=y2;
