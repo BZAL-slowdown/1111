@@ -25,20 +25,27 @@ int time_bg_run(void)
  int fd=open("/dev/input/event0",O_RDWR);if(fd==-1){munmap(l,800*480*4);close(lcd_fd);return 0;}
  int ls=-1,td=0,tx1=0,ty1=0,tx2=0,ty2=0,has_x=0,has_y=0;struct input_event ev;
  while(1){fd_set fds;struct timeval tv={1,0};FD_ZERO(&fds);FD_SET(fd,&fds);
-  if(select(fd+1,&fds,NULL,NULL,&tv)==0){time_t n=time(NULL);struct tm*t=localtime(&n);if(t->tm_sec!=ls){ls=t->tm_sec;text_update(l);}continue;}
-  read(fd,&ev,sizeof(ev));
+  int sr=select(fd+1,&fds,NULL,NULL,&tv);
+  if(sr==0){time_t n=time(NULL);struct tm*t=localtime(&n);if(t->tm_sec!=ls){ls=t->tm_sec;text_update(l);}continue;}
+  if(sr<0)continue;
+  if(read(fd,&ev,sizeof(ev))!=sizeof(ev))continue;
   if(ev.type==EV_ABS){
-   if(ev.code==ABS_X){touch_x=ev.value*800/1024;has_x=1;}
-   if(ev.code==ABS_Y){touch_y=ev.value*480/600;has_y=1;}
+   if(ev.code==ABS_X||ev.code==ABS_MT_POSITION_X){touch_x=ev.value*800/1024;has_x=1;}
+   if(ev.code==ABS_Y||ev.code==ABS_MT_POSITION_Y){touch_y=ev.value*480/600;has_y=1;}
    if(has_x&&has_y){
     if(!td){td=1;tx1=touch_x;ty1=touch_y;}
     tx2=touch_x;ty2=touch_y;
     int dx=tx2-tx1,dy=ty2-ty1;
-    if(abs(dy)>SWIPE_THRESH&&abs(dy)>abs(dx)&&dy<0){
+    if(abs(dy)>SWIPE_THRESH&&abs(dy)>abs(dx)){
      printf("time swipe move: (%d,%d)->(%d,%d), dx=%d dy=%d\n",tx1,ty1,tx2,ty2,dx,dy);
      close(fd);munmap(l,800*480*4);close(lcd_fd);return 1;
     }}}
-  if(ev.type==EV_KEY&&ev.code==BTN_TOUCH&&ev.value==1&&has_x&&has_y){td=1;tx1=touch_x;ty1=touch_y;}
-  if(ev.type==EV_KEY&&ev.code==BTN_TOUCH&&ev.value==0){tx2=touch_x;ty2=touch_y;close(fd);munmap(l,800*480*4);close(lcd_fd);
-   int dx=tx2-tx1,dy=ty2-ty1;printf("time swipe: (%d,%d)->(%d,%d), dx=%d dy=%d\n",tx1,ty1,tx2,ty2,dx,dy);
-   return(abs(dy)>SWIPE_THRESH&&abs(dy)>abs(dx)&&dy<0)?1:0;}}}
+  if(ev.type==EV_KEY&&ev.code==BTN_TOUCH&&ev.value==1){
+   td=0;has_x=0;has_y=0;
+  }
+  if(ev.type==EV_KEY&&ev.code==BTN_TOUCH&&ev.value==0){
+   tx2=touch_x;ty2=touch_y;int dx=tx2-tx1,dy=ty2-ty1;
+   printf("time swipe release: (%d,%d)->(%d,%d), dx=%d dy=%d\n",tx1,ty1,tx2,ty2,dx,dy);
+   close(fd);munmap(l,800*480*4);close(lcd_fd);
+   return(abs(dy)>SWIPE_THRESH&&abs(dy)>abs(dx))?1:0;
+  }}}
